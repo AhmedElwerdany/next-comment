@@ -1,8 +1,8 @@
 import { css } from '@emotion/css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createEditor, Editor, Element, Path, Range, Text, Transforms } from 'slate';
+import { createEditor, Editor, Range, Text, Transforms } from 'slate';
 import { withHistory } from 'slate-history';
-import { Editable, ReactEditor, Slate, useFocused, useSlate, withReact } from 'slate-react';
+import { Editable, Slate, useFocused, useSlate, withReact } from 'slate-react';
 
 import { Button, Icon, Menu, Portal } from '.';
 
@@ -29,21 +29,9 @@ import { Button, Icon, Menu, Portal } from '.';
 const HoveringMenuExample = () => {
   const editor = useMemo(() => withHistory(withReact(createEditor())), []);
 
-  const renderElement = useCallback((props) => {
-    console.log(props);
-    switch (props.element.type) {
-      case "paragraph":
-        return <p {...props.attributes}></p>;
-      case "code":
-        //    return <CodeElement {...props} />
-        //  default:
-        return <span {...props.attributes}>a</span>;
-    }
-  }, []);
-
   return (
     <Slate editor={editor} value={initialValue}>
-      <HoveringToolbar />
+      <CommentDialog />
       <Editable
         renderLeaf={(props) => <Leaf {...props} />}
         placeholder="Enter some text..."
@@ -60,7 +48,6 @@ const HoveringMenuExample = () => {
               return toggleFormat(editor, "underlined");
             case "formatComment":
               event.preventDefault();
-              console.log(event);
               return toggleFormat(editor, "comment");
           }
         }}
@@ -95,68 +82,7 @@ const getChildren = (editor, format) => {
   return result;
 };
 
-const createLinkNode = (comment, text) => ({
-  type: "comment",
-  comment,
-  children: [{ text }],
-});
-
-const removeLink = (editor, opts = {}) => {
-  Transforms.unwrapNodes(editor, {
-    ...opts,
-    match: (n) =>
-      !Editor.isEditor(n) && Element.isElement(n) && n.type === "comment",
-  });
-};
-
-const createParagraphNode = (children = [{ text: "" }]) => ({
-  type: "paragraph",
-  children,
-});
-
-const insertLink = (editor, url) => {
-  if (!url) return;
-
-  const { selection } = editor;
-  const link = createLinkNode(url, "New Link");
-
-  ReactEditor.focus(editor);
-
-  if (!!selection) {
-    const [parentNode, parentPath] = Editor.parent(
-      editor,
-      selection.focus?.path
-    );
-
-    // Remove the Link node if we're inserting a new link node inside of another
-    // link.
-    if (parentNode.type === "link") {
-      removeLink(editor);
-    }
-
-    if (editor.isVoid(parentNode)) {
-      // Insert the new link after the void node
-      Transforms.insertNodes(editor, createParagraphNode([link]), {
-        at: Path.next(parentPath),
-        select: true,
-      });
-    } else if (Range.isCollapsed(selection)) {
-      // Insert the new link in our last known location
-      Transforms.insertNodes(editor, link, { select: true });
-    } else {
-      // Wrap the currently selected range of text into a Link
-      Transforms.wrapNodes(editor, link, { split: true });
-      // Remove the highlight and move the cursor to the end of the highlight
-      Transforms.collapse(editor, { edge: "end" });
-    }
-  } else {
-    // Insert the new link node at the bottom of the Editor when selection
-    // is falsey
-    Transforms.insertNodes(editor, createParagraphNode([link]));
-  }
-};
-
-const Leaf = ({ attributes, children, leaf, node }) => {
+const Leaf = ({ attributes, children, leaf }) => {
   if (leaf.bold) {
     children = <strong>{children}</strong>;
   }
@@ -172,6 +98,7 @@ const Leaf = ({ attributes, children, leaf, node }) => {
   if (leaf.comment) {
     children = (
       <span
+        {...attributes}
         data-comment={leaf.data}
         className={css`
           background: green;
@@ -186,15 +113,15 @@ const Leaf = ({ attributes, children, leaf, node }) => {
   return <span {...attributes}>{children}</span>;
 };
 
-const HoveringToolbar = () => {
+const CommentDialog = () => {
   const ref = useRef();
   const editor = useSlate();
   const [value, setValue] = useState();
   const inFocus = useFocused();
-  
-  let children = getChildren(editor, "comment")
+
+  let children = getChildren(editor, "comment");
   let data = children ? children[0].data : null;
-  
+
   useEffect(() => {
     const el = ref.current;
     const { selection } = editor;
@@ -203,36 +130,70 @@ const HoveringToolbar = () => {
       return;
     }
 
-    if (
-      !selection ||
-      !inFocus ||
-      Range.isCollapsed(selection) ||
-      Editor.string(editor, selection) === ""
-    ) {
-      // el.removeAttribute('style')
+    if (!selection) {
+      el.removeAttribute("style");
       return;
     }
 
     const domSelection = window.getSelection();
-    if (!domSelection) {
+
+    if (domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment) {
+      el.style.opacity = '1'
+      return
+    }
+    
+    // if (
+    //   Editor.string(editor, selection).trim() === "" &&
+    //   !domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment
+    // ) {
+    //   el.removeAttribute("style");
+    //   debugger;
+    //   return;
+    // }
+
+    // if (!inFocus && domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment) {
+    //   el.style.opacity = '1'
+    //   return
+    // }
+
+    if (
+      (!selection ||
+      !inFocus ||
+      Range.isCollapsed(selection))
+      && domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment
+      //  || Editor.string(editor, selection) === ""
+    ) {
+      el.style.opacity = '1'
+      debugger;
       return;
     }
+
+    el.removeAttribute('style')
+
+    // if (!domSelection) {
+    //   el.removeAttribute("style");
+    //   debugger;
+    //   return;
+    // }
+
+    console.log(domSelection);
+
+    // if (domSelection.type == "Caret") {
+    //   debugger;
+    //   el.removeAttribute("style");
+    //   return;
+    // }
     // const domRange = domSelection.getRangeAt(0)
     // const rect = domRange.getBoundingClientRect()
 
     el.style.opacity = "1";
-    // el.style.top = `${rect.top + window.pageYOffset - el.offsetHeight}px`
-    // el.style.left = `${rect.left +
-    //   window.pageXOffset -
-    //   el.offsetWidth / 2 +
-    //   rect.width / 2}px`
   });
 
   useEffect(() => {
     if (children && children[0].data) {
       setValue(children[0].data);
-    }else {
-      setValue('')
+    } else {
+      setValue("");
     }
   }, [data]);
 
@@ -266,57 +227,50 @@ const HoveringToolbar = () => {
   );
 };
 
-const FormatButton = ({ format, icon, text, value }) => {
+const FormatButton = ({ format, icon, value }) => {
   const editor = useSlate();
+
   return (
     <div>
       {isFormatActive(editor, format) ? (
         <div>
-      <Button
-        reversed
-        active={true}
-        onClick={() => {
-          toggleFormat(editor, format, { data: value });
-          toggleFormat(editor, format, { data: value });
-        }}
-      >
-        Update
-        {icon ? <Icon>{icon}</Icon> : null}
-      </Button>
-      <Button
-      className={css`margin:0 10px;`}
-      reversed
-      active={true}
-      onClick={() => {
-        toggleFormat(editor, format, { data: value });
-      }}
-      >
-        Cancel
-      </Button>
-      </div>
-      ): (
+          <Button
+            reversed
+            active={true}
+            onClick={() => {
+              toggleFormat(editor, format, { data: value });
+              toggleFormat(editor, format, { data: value });
+            }}
+          >
+            Update
+          </Button>
+          <Button
+            className={css`
+              margin: 0 10px;
+            `}
+            reversed
+            active={true}
+            onClick={() => {
+              toggleFormat(editor, format, { data: value });
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      ) : (
         <Button>
           <Button
-        reversed
-        active={true}
-        onClick={() => {
-          toggleFormat(editor, format, { data: value });
-        }}
-      >
-        Comment
-        {icon ? <Icon>{icon}</Icon> : null}
-      </Button>
+            reversed
+            active={true}
+            onClick={() => {
+              toggleFormat(editor, format, { data: value });
+            }}
+          >
+            Comment
+            {icon ? <Icon>{icon}</Icon> : null}
+          </Button>
         </Button>
       )}
-      {/* <Button
-      className={css`margin:0 10px;`}
-      reversed
-      active={true}
-      onClick={() => {
-          toggleFormat(editor, format, { data: value });
-        }}>
-        Cancel
-      </Button> */}
     </div>
   );
 };
@@ -331,6 +285,8 @@ const initialValue = [
       { text: "bold", bold: true },
       { text: ", " },
       { text: "italic", italic: true },
+      { text: " " },
+      { text: "or comment", comment: true, data: " comment text" },
       { text: ", or anything else you might want to do!" },
     ],
   },

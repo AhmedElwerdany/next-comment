@@ -6,8 +6,8 @@ export const Button = React.forwardRef(
   (
     {
       className,
-      active,
-      reversed,
+      active = true,
+      reversed = true,
       ...props
     },
     ref

@@ -1,32 +1,11 @@
-import { css } from '@emotion/css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createEditor, Editor, Range, Text, Transforms } from 'slate';
 import { withHistory } from 'slate-history';
 import { Editable, Slate, useFocused, useSlate, withReact } from 'slate-react';
 
-import { Button, Icon, Menu, Portal } from '.';
+import { Button, Menu, Portal } from '.';
 
-// const schema = {
-//   document: {
-//     nodes: [{types: ['paragraph']}]
-//   },
-//   blocks: {
-//     // paragraph: {
-//     //   nodes: [{ objects: ['text'] }],
-//     // },
-//   },
-//   inline: {
-//     paragraph : {
-//       isVoid: true,
-//       nodes: [{ objects: ['text'] }],
-//       data: {
-//         comment :
-//       }
-//     }
-//   }
-// }
-
-const HoveringMenuExample = () => {
+const TextEditor = () => {
   const editor = useMemo(() => withHistory(withReact(createEditor())), []);
 
   return (
@@ -48,7 +27,7 @@ const HoveringMenuExample = () => {
               return toggleFormat(editor, "underlined");
             case "formatComment":
               event.preventDefault();
-              return toggleFormat(editor, "comment");
+              return toggleFormat(editor, "comment", { isVoid: true });
           }
         }}
       />
@@ -97,14 +76,7 @@ const Leaf = ({ attributes, children, leaf }) => {
 
   if (leaf.comment) {
     children = (
-      <span
-        {...attributes}
-        data-comment={leaf.data}
-        className={css`
-          background: green;
-          color: white;
-        `}
-      >
+      <span {...attributes} data-comment={leaf.data} className="comment--text">
         {children}
       </span>
     );
@@ -137,54 +109,48 @@ const CommentDialog = () => {
 
     const domSelection = window.getSelection();
 
+    /**
+     * if the parant of the selected text is `comment`, show the dialog
+     */
     if (domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment) {
-      el.style.opacity = '1'
-      return
-    }
-    
-    // if (
-    //   Editor.string(editor, selection).trim() === "" &&
-    //   !domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment
-    // ) {
-    //   el.removeAttribute("style");
-    //   debugger;
-    //   return;
-    // }
-
-    // if (!inFocus && domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment) {
-    //   el.style.opacity = '1'
-    //   return
-    // }
-
-    if (
-      (!selection ||
-      !inFocus ||
-      Range.isCollapsed(selection))
-      && domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment
-      //  || Editor.string(editor, selection) === ""
-    ) {
-      el.style.opacity = '1'
-      debugger;
+      el.style.opacity = "1";
       return;
     }
 
-    el.removeAttribute('style')
+    /**
+     * if the selected text is empty &
+     * the parant of the selected text is not a `comment`, hide the dialog
+     */
+    if (
+      Editor.string(editor, selection).trim() === "" &&
+      !domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment
+    ) {
+      el.removeAttribute("style");
+      return;
+    }
 
-    // if (!domSelection) {
-    //   el.removeAttribute("style");
-    //   debugger;
-    //   return;
-    // }
+    /**
+     * if Range is Collapsed, But
+     * the parent of selected text is a `comment`, show the dialog
+     */
+    if (
+      Range.isCollapsed(selection) &&
+      domSelection.extentNode?.parentNode?.parentNode?.dataset?.comment
+    ) {
+      el.style.opacity = "1";
+      return;
+    }
 
-    console.log(domSelection);
-
-    // if (domSelection.type == "Caret") {
-    //   debugger;
-    //   el.removeAttribute("style");
-    //   return;
-    // }
-    // const domRange = domSelection.getRangeAt(0)
-    // const rect = domRange.getBoundingClientRect()
+    /**
+     * if there is no selection OR there is no focus, And there is no Selection in the `Editor`, hide the dialog
+     */
+    if (
+      (!selection || !inFocus) &&
+      Editor.string(editor, selection).trim() === ""
+    ) {
+      el.removeAttribute("style");
+      return;
+    }
 
     el.style.opacity = "1";
   });
@@ -199,80 +165,43 @@ const CommentDialog = () => {
 
   return (
     <Portal>
-      <Menu
-        ref={ref}
-        className={css`
-          padding: 8px 7px 6px;
-          position: absolute;
-          width: 300px;
-          z-index: 1;
-          right: 0;
-          bottom: 0;
-          margin-top: -6px;
-          opacity: 0;
-          background-color: #222;
-          border-radius: 4px;
-          transition: opacity 0.75s;
-        `}
-        onMouseDown={(e) => {
-          // prevent toolbar from taking focus away from editor
-          // TODO: remove e.preventDefault()
-          // e.preventDefault()
-        }}
-      >
-        <input value={value} onChange={(e) => setValue(e.target.value)} />
+      <Menu ref={ref} className="menu--wrapper">
+        <input className='comment--input' value={value} onChange={(e) => setValue(e.target.value)} />
         <FormatButton format="comment" text="comment" value={value} />
       </Menu>
     </Portal>
   );
 };
 
-const FormatButton = ({ format, icon, value }) => {
+const FormatButton = ({ format, value }) => {
   const editor = useSlate();
 
-  return (
-    <div>
-      {isFormatActive(editor, format) ? (
-        <div>
-          <Button
-            reversed
-            active={true}
-            onClick={() => {
-              toggleFormat(editor, format, { data: value });
-              toggleFormat(editor, format, { data: value });
-            }}
-          >
-            Update
-          </Button>
-          <Button
-            className={css`
-              margin: 0 10px;
-            `}
-            reversed
-            active={true}
-            onClick={() => {
-              toggleFormat(editor, format, { data: value });
-            }}
-          >
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <Button>
-          <Button
-            reversed
-            active={true}
-            onClick={() => {
-              toggleFormat(editor, format, { data: value });
-            }}
-          >
-            Comment
-            {icon ? <Icon>{icon}</Icon> : null}
-          </Button>
+  const modifyComment = (update) => {
+    toggleFormat(editor, format, { data: value });
+    if (update) {
+      toggleFormat(editor, format, { data: value });
+    }
+  };
+
+  let buttons;
+
+  if (isFormatActive(editor, format)) {
+    buttons = (
+      <>
+        <Button onClick={() => modifyComment(true)} className='comment--update-btn'>Update</Button>
+        <Button
+          className='comment--comment-cancel'
+          onClick={() => modifyComment()}
+        >
+          Cancel
         </Button>
-      )}
-    </div>
-  );
+      </>
+    );
+  } else {
+    buttons = <Button onClick={() => modifyComment()} className='comment--comment-btn'>Comment</Button>;
+  }
+
+  return <div className='buttons-wrapper'>{buttons}</div>;
 };
 
 const initialValue = [
@@ -286,7 +215,12 @@ const initialValue = [
       { text: ", " },
       { text: "italic", italic: true },
       { text: " " },
-      { text: "or comment", comment: true, data: " comment text" },
+      {
+        text: "or comment",
+        comment: true,
+        data: " comment text",
+        isVoid: true,
+      },
       { text: ", or anything else you might want to do!" },
     ],
   },
@@ -300,4 +234,4 @@ const initialValue = [
   },
 ];
 
-export default HoveringMenuExample;
+export default TextEditor;
